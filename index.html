@@ -93,8 +93,7 @@
 
     <!-- ===== YOU CAN MODIFY: UI Controls ===== -->
     <div id="controls">
-      <button onclick="playVideo()">Play</button>
-      <button onclick="pauseVideo()">Pause</button>
+      <button id="playPauseBtn" onclick="toggleVideo()">⏸ Pause</button>
       <button onclick="takePhoto()">📷 Photo</button>
       <button onclick="toggleRecording()">🔴 Record</button>
     </div>
@@ -116,22 +115,22 @@
       let isRecording = false;
       let recordingAnimationId;
       // ===== END: CORE VARIABLES =====
-
       // Track the timer interval externally
       let timerInterval;
-
       // ===== VIDEO PLAYBACK FUNCTIONS (SAFE TO MODIFY) =====
-      function playVideo() {
-        video.play();
-      }
-
-      function pauseVideo() {
-        video.pause();
+      function toggleVideo() {
+        const btn = document.getElementById('playPauseBtn');
+        if (video.paused) {
+          video.play();
+          btn.innerText = "⏸ Pause";
+        } else {
+          video.pause();
+          btn.innerText = "▶ Play";
+        }
       }
       // ===== END: VIDEO PLAYBACK FUNCTIONS =====
 
       // ===== CAPTURE ENGINE (DO NOT MODIFY - Technical) =====
-      // These functions handle the complex canvas merging and recording
       function getMindARVideo() {
         return Array.from(document.querySelectorAll('video')).find(v => v.srcObject !== null && v.id !== 'squeezerVideo');
       }
@@ -147,15 +146,32 @@
           mergedCanvas.height = arCanvas.height;
           const ctx = mergedCanvas.getContext('2d');
 
-          // Draw camera feed
           if (mindArVideo && mindArVideo.readyState === mindArVideo.HAVE_ENOUGH_DATA) {
-            ctx.drawImage(mindArVideo, 0, 0, mergedCanvas.width, mergedCanvas.height);
+            const vWidth = mindArVideo.videoWidth;
+            const vHeight = mindArVideo.videoHeight;
+            const targetRatio = arCanvas.width / arCanvas.height;
+            const videoRatio = vWidth / vHeight;
+
+            let drawWidth, drawHeight, offsetX, offsetY;
+      // Overlay AR canvas
+            if (videoRatio > targetRatio) {
+              drawHeight = arCanvas.height;
+              drawWidth = arCanvas.height * videoRatio;
+              offsetX = (arCanvas.width - drawWidth) / 2;
+              offsetY = 0;
+            } else {
+              drawWidth = arCanvas.width;
+              drawHeight = arCanvas.width / videoRatio;
+              offsetX = 0;
+              offsetY = (arCanvas.height - drawHeight) / 2;
+            }
+
+            ctx.drawImage(mindArVideo, offsetX, offsetY, drawWidth, drawHeight);
           } else {
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, mergedCanvas.width, mergedCanvas.height);
           }
-
-          // Overlay AR canvas
+        // Trigger Shutter Flash UI feedback immediately
           ctx.drawImage(arCanvas, 0, 0);
 
           return mergedCanvas;
@@ -170,7 +186,6 @@
       function takePhoto() {
         controls.classList.add('hidden');
 
-        // Trigger Shutter Flash UI feedback immediately
         const flash = document.createElement('div');
         flash.id = 'flash-overlay';
         document.body.appendChild(flash);
@@ -214,7 +229,6 @@
 
         isRecording = true;
         recordedChunks = [];
-
         // Reset and begin on-screen counter tracker
         const timerElement = document.getElementById('recordTimer');
         let totalSeconds = 0;
@@ -285,6 +299,11 @@
         cancelAnimationFrame(recordingAnimationId);
         clearInterval(timerInterval);
 
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {      function stopRecording() {
+        isRecording = false;
+        cancelAnimationFrame(recordingAnimationId);
+        clearInterval(timerInterval);
+
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
           mediaRecorder.stop();
         }
@@ -297,6 +316,31 @@
       // ===== INITIALIZATION (DO NOT MODIFY) =====
       video.autoplay = true;
       // ===== END: INITIALIZATION =====
+
+      // ===== HIGH-QUALITY CAMERA & AUTOPLAY AUDIO INJECTION (SAFE TO MODIFY) =====
+      (function applyMobileQualityFixes() {
+        document.addEventListener('DOMContentLoaded', () => {
+          video.play().catch(() => {
+            const forcePlayOnTouch = () => {
+              video.play();
+              document.removeEventListener('touchstart', forcePlayOnTouch);
+            };
+            document.addEventListener('touchstart', forcePlayOnTouch);
+          });
+        });
+
+        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = async function(constraints) {
+          if (constraints && constraints.video) {
+            constraints.video = {
+              facingMode: "environment",
+              width: { ideal: 1920, min: 1280 },
+              height: { ideal: 1080, min: 720 }
+            };
+          }
+          return originalGetUserMedia(constraints);
+        };
+      })();
     </script>
   </body>
 </html>
