@@ -82,6 +82,7 @@
       let mediaRecorder;
       let recordedChunks = [];
       let isRecording = false;
+      let canvasStream;
 
       function playVideo() {
         video.play();
@@ -95,7 +96,6 @@
       function takePhoto() {
         controls.classList.add('hidden');
         
-        // Wait for render, then capture
         requestAnimationFrame(() => {
           setTimeout(() => {
             const scene = document.querySelector('a-scene');
@@ -124,7 +124,6 @@
       }
 
       function startRecording() {
-        // Hide normal controls, show recording controls
         controls.classList.add('hidden');
         recordingControls.classList.add('show');
         
@@ -133,36 +132,64 @@
         
         try {
           const scene = document.querySelector('a-scene');
-          const stream = scene.renderer.domElement.captureStream(30);
+          const renderer = scene.renderer;
           
-          mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'video/webm;codecs=vp9',
-            videoBitsPerSecond: 2500000
-          });
-          
-          mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              recordedChunks.push(event.data);
-            }
-          };
-          
-          mediaRecorder.onstop = () => {
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'julius-squeezer-' + Date.now() + '.webm';
-            link.click();
-            URL.revokeObjectURL(url);
-          };
-          
-          mediaRecorder.start();
+          // Create canvas stream from the renderer
+          if (renderer.domElement.captureStream) {
+            canvasStream = renderer.domElement.captureStream(30);
+            createMediaRecorder(canvasStream);
+          } else {
+            // Fallback for browsers that don't support captureStream
+            alert('Video recording not supported on this device/browser. Try using Chrome or Firefox.');
+            controls.classList.remove('hidden');
+            recordingControls.classList.remove('show');
+          }
         } catch (e) {
           console.error('Recording error:', e);
-          alert('Could not start recording. Your browser may not support this feature.');
+          alert('Could not start recording: ' + e.message);
           controls.classList.remove('hidden');
           recordingControls.classList.remove('show');
         }
+      }
+
+      function createMediaRecorder(stream) {
+        const options = { 
+          mimeType: 'video/webm'
+        };
+        
+        // Check if the mimeType is supported
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options.mimeType = 'video/webm;codecs=vp8';
+        }
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options.mimeType = 'video/webm;codecs=vp9';
+        }
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options.mimeType = 'video/webm;codecs=h264';
+        }
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options.mimeType = '';
+        }
+        
+        mediaRecorder = new MediaRecorder(stream, options);
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'julius-squeezer-' + Date.now() + '.webm';
+          link.click();
+          URL.revokeObjectURL(url);
+        };
+        
+        mediaRecorder.start();
       }
 
       function stopRecording() {
@@ -170,11 +197,13 @@
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
           mediaRecorder.stop();
         }
+        if (canvasStream) {
+          canvasStream.getTracks().forEach(track => track.stop());
+        }
         recordingControls.classList.remove('show');
         controls.classList.remove('hidden');
       }
 
-      // Start with autoplay
       video.autoplay = true;
     </script>
   </body>
