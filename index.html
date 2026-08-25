@@ -52,6 +52,8 @@
     </style>
   </head>
   <body>
+    <!-- ===== DO NOT MODIFY THIS SECTION ===== -->
+    <!-- A-Frame Scene: Image tracking and AR setup -->
     <a-scene mindar-image="imageTargetSrc: ./squeezer.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
       <a-assets>
         <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline></video>
@@ -63,7 +65,9 @@
         <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0"></a-plane>
       </a-entity>
     </a-scene>
+    <!-- ===== END: DO NOT MODIFY ===== -->
 
+    <!-- ===== YOU CAN MODIFY: UI Controls ===== -->
     <div id="controls">
       <button onclick="playVideo()">Play</button>
       <button onclick="pauseVideo()">Pause</button>
@@ -74,8 +78,10 @@
     <div id="recordingControls">
       <button class="recording" onclick="stopRecording()">⏹️ Stop Recording</button>
     </div>
+    <!-- ===== END: UI Controls ===== -->
 
     <script>
+      // ===== CORE VARIABLES (DO NOT MODIFY) =====
       const video = document.getElementById('squeezerVideo');
       const controls = document.getElementById('controls');
       const recordingControls = document.getElementById('recordingControls');
@@ -83,7 +89,9 @@
       let recordedChunks = [];
       let isRecording = false;
       let recordingAnimationId;
+      // ===== END: CORE VARIABLES =====
 
+      // ===== VIDEO PLAYBACK FUNCTIONS (SAFE TO MODIFY) =====
       function playVideo() {
         video.play();
       }
@@ -91,13 +99,14 @@
       function pauseVideo() {
         video.pause();
       }
+      // ===== END: VIDEO PLAYBACK FUNCTIONS =====
 
-      // Get MindAR's camera video stream
+      // ===== CAPTURE ENGINE (DO NOT MODIFY - Technical) =====
+      // These functions handle the complex canvas merging and recording
       function getMindARVideo() {
         return Array.from(document.querySelectorAll('video')).find(v => v.srcObject !== null && v.id !== 'squeezerVideo');
       }
 
-      // Merge camera feed with AR canvas
       function mergeCanvases() {
         try {
           const scene = document.querySelector('a-scene');
@@ -126,8 +135,9 @@
           return null;
         }
       }
+      // ===== END: CAPTURE ENGINE =====
 
-      // Take Photo
+      // ===== PHOTO & VIDEO FUNCTIONS (SAFE TO MODIFY FOR UI FLOW) =====
       function takePhoto() {
         controls.classList.add('hidden');
 
@@ -153,7 +163,6 @@
         }, 100);
       }
 
-      // Toggle Video Recording
       function toggleRecording() {
         startRecording();
       }
@@ -228,8 +237,11 @@
         recordingControls.classList.remove('show');
         controls.classList.remove('hidden');
       }
+      // ===== END: PHOTO & VIDEO FUNCTIONS =====
 
+      // ===== INITIALIZATION (DO NOT MODIFY) =====
       video.autoplay = true;
+      // ===== END: INITIALIZATION =====
     </script>
   </body>
 </html>
