@@ -6,13 +6,38 @@
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
-      body { margin: 0; overflow: hidden; }
-      #debug { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.7); padding: 10px; font-family: monospace; z-index: 100; }
+      * { margin: 0; padding: 0; }
+      body { width: 100%; height: 100%; overflow: hidden; }
+      a-scene { height: 100vh; width: 100vw; }
+      #debug { 
+        position: fixed; 
+        top: 10px; 
+        left: 10px; 
+        color: white; 
+        background: rgba(0,0,0,0.9); 
+        padding: 15px; 
+        font-family: monospace;
+        font-size: 12px;
+        z-index: 9999;
+        max-width: 400px;
+        max-height: 300px;
+        overflow-y: auto;
+        border: 2px solid lime;
+      }
     </style>
   </head>
   <body>
-    <div id="debug">Loading...</div>
-    <a-scene mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/saucyplatano/julius-squeezer@main/targets.mind;" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <div id="debug">
+      <div>Initializing...</div>
+      <div id="logs"></div>
+    </div>
+    
+    <a-scene 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/saucyplatano/julius-squeezer@main/targets.mind;" 
+      vr-mode-ui="enabled: false" 
+      device-orientation-permission-ui="enabled: false"
+      embedded
+    >
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane color="blue" opacity="0.5" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
@@ -20,16 +45,69 @@
     </a-scene>
 
     <script>
-      document.querySelector('a-scene').addEventListener('loaded', () => {
-        document.getElementById('debug').textContent = 'Scene loaded!';
+      const logs = document.getElementById('logs');
+      
+      function log(msg) {
+        console.log(msg);
+        const div = document.createElement('div');
+        div.textContent = msg;
+        logs.appendChild(div);
+        logs.scrollTop = logs.scrollHeight;
+      }
+
+      log('Page loaded');
+
+      // Request camera permissions immediately
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+          log('✓ Camera access granted');
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(err => {
+          log('✗ Camera error: ' + err.message);
+        });
+
+      // Wait for scene to be ready
+      const scene = document.querySelector('a-scene');
+      
+      if (scene.hasLoaded) {
+        log('Scene already loaded');
+      } else {
+        scene.addEventListener('loaded', () => {
+          log('✓ Scene loaded event fired');
+        });
+      }
+
+      // MindAR specific debugging
+      scene.addEventListener('mindara-imageTargetFound', () => {
+        log('✓ MindAR target found!');
       });
-      document.querySelector('a-scene').addEventListener('error', (e) => {
-        document.getElementById('debug').textContent = 'Error: ' + e.detail.message;
-        console.error('Scene error:', e);
+
+      scene.addEventListener('mindara-imageTargetLost', () => {
+        log('MindAR target lost');
       });
+
+      // Generic error handlers
+      scene.addEventListener('error', (e) => {
+        log('✗ Scene error: ' + (e.detail?.message || e.message));
+      });
+
       window.addEventListener('error', (e) => {
-        console.error('Script error:', e);
+        log('✗ Global error: ' + e.message);
       });
+
+      // Check MindAR initialization
+      setTimeout(() => {
+        if (window.MINDAR) {
+          log('✓ MindAR loaded');
+          const component = scene.getAttribute('mindar-image');
+          log('MindAR target: ' + JSON.stringify(component));
+        } else {
+          log('✗ MindAR not found on window');
+        }
+      }, 2000);
+
+      log('Waiting for camera...');
     </script>
   </body>
 </html>
