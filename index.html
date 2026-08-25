@@ -13,6 +13,11 @@
         left: 50%;
         transform: translateX(-50%);
         z-index: 100;
+        transition: opacity 0.3s;
+      }
+      #controls.hidden {
+        opacity: 0;
+        pointer-events: none;
       }
       button {
         padding: 10px 20px;
@@ -26,6 +31,12 @@
       }
       button:hover {
         background-color: #45a049;
+      }
+      button.recording {
+        background-color: #f44336;
+      }
+      button.recording:hover {
+        background-color: #da190b;
       }
     </style>
   </head>
@@ -45,10 +56,18 @@
     <div id="controls">
       <button onclick="playVideo()">Play</button>
       <button onclick="pauseVideo()">Pause</button>
+      <button onclick="takePhoto()">📷 Photo</button>
+      <button id="recordBtn" onclick="toggleRecording()">🔴 Record</button>
     </div>
 
     <script>
       const video = document.getElementById('squeezerVideo');
+      const controls = document.getElementById('controls');
+      const recordBtn = document.getElementById('recordBtn');
+      let mediaRecorder;
+      let recordedChunks = [];
+      let isRecording = false;
+      let canvas;
 
       function playVideo() {
         video.play();
@@ -56,6 +75,93 @@
 
       function pauseVideo() {
         video.pause();
+      }
+
+      // Take Photo
+      function takePhoto() {
+        controls.classList.add('hidden');
+        
+        setTimeout(() => {
+          const scene = document.querySelector('a-scene');
+          const renderer = scene.renderer;
+          
+          canvas = document.createElement('canvas');
+          canvas.width = renderer.domElement.width;
+          canvas.height = renderer.domElement.height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(renderer.domElement, 0, 0);
+          
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png');
+          link.download = 'julius-squeezer-' + Date.now() + '.png';
+          link.click();
+          
+          controls.classList.remove('hidden');
+        }, 100);
+      }
+
+      // Toggle Video Recording
+      function toggleRecording() {
+        if (!isRecording) {
+          startRecording();
+        } else {
+          stopRecording();
+        }
+      }
+
+      function startRecording() {
+        controls.classList.add('hidden');
+        recordBtn.textContent = '⏹️ Stop';
+        recordBtn.classList.add('recording');
+        
+        isRecording = true;
+        recordedChunks = [];
+        
+        const scene = document.querySelector('a-scene');
+        const stream = scene.renderer.domElement.captureStream(30);
+        
+        // Get audio if available (optional)
+        try {
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const audioSource = audioContext.createMediaStreamAudioSource(stream);
+          const destination = audioContext.createMediaStreamDestination();
+          audioSource.connect(destination);
+          stream.addTrack(destination.stream.getAudioTracks()[0]);
+        } catch (e) {
+          // Audio not available, continue without it
+        }
+        
+        mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'video/webm;codecs=vp9',
+          videoBitsPerSecond: 2500000
+        });
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'julius-squeezer-' + Date.now() + '.webm';
+          link.click();
+          URL.revokeObjectURL(url);
+        };
+        
+        mediaRecorder.start();
+      }
+
+      function stopRecording() {
+        isRecording = false;
+        mediaRecorder.stop();
+        recordBtn.textContent = '🔴 Record';
+        recordBtn.classList.remove('recording');
+        controls.classList.remove('hidden');
       }
 
       // Start with autoplay
