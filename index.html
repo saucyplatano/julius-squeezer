@@ -52,7 +52,7 @@
     </style>
   </head>
   <body>
-    <a-scene mindar-image="imageTargetSrc: ./squeezer.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights, preserveDrawingBuffer: true" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-scene mindar-image="imageTargetSrc: ./squeezer.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
       <a-assets>
         <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline></video>
       </a-assets>
@@ -99,27 +99,32 @@
 
       // Merge camera feed with AR canvas
       function mergeCanvases() {
-        const scene = document.querySelector('a-scene');
-        const arCanvas = scene.canvas;
-        const mindArVideo = getMindARVideo();
+        try {
+          const scene = document.querySelector('a-scene');
+          const arCanvas = scene.renderer.domElement;
+          const mindArVideo = getMindARVideo();
 
-        const mergedCanvas = document.createElement('canvas');
-        mergedCanvas.width = arCanvas.width;
-        mergedCanvas.height = arCanvas.height;
-        const ctx = mergedCanvas.getContext('2d');
+          const mergedCanvas = document.createElement('canvas');
+          mergedCanvas.width = arCanvas.width;
+          mergedCanvas.height = arCanvas.height;
+          const ctx = mergedCanvas.getContext('2d');
 
-        // Draw camera feed
-        if (mindArVideo && mindArVideo.readyState === mindArVideo.HAVE_ENOUGH_DATA) {
-          ctx.drawImage(mindArVideo, 0, 0, mergedCanvas.width, mergedCanvas.height);
-        } else {
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, mergedCanvas.width, mergedCanvas.height);
+          // Draw camera feed
+          if (mindArVideo && mindArVideo.readyState === mindArVideo.HAVE_ENOUGH_DATA) {
+            ctx.drawImage(mindArVideo, 0, 0, mergedCanvas.width, mergedCanvas.height);
+          } else {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, mergedCanvas.width, mergedCanvas.height);
+          }
+
+          // Overlay AR canvas
+          ctx.drawImage(arCanvas, 0, 0);
+
+          return mergedCanvas;
+        } catch (e) {
+          console.error('Merge error:', e);
+          return null;
         }
-
-        // Overlay AR canvas
-        ctx.drawImage(arCanvas, 0, 0);
-
-        return mergedCanvas;
       }
 
       // Take Photo
@@ -129,6 +134,11 @@
         setTimeout(() => {
           try {
             const mergedCanvas = mergeCanvases();
+            if (!mergedCanvas) {
+              console.error('Could not create merged canvas');
+              controls.classList.remove('hidden');
+              return;
+            }
 
             const link = document.createElement('a');
             link.href = mergedCanvas.toDataURL('image/png');
@@ -157,7 +167,7 @@
 
         try {
           const scene = document.querySelector('a-scene');
-          const arCanvas = scene.canvas;
+          const arCanvas = scene.renderer.domElement;
 
           const recordCanvas = document.createElement('canvas');
           recordCanvas.width = arCanvas.width;
@@ -171,7 +181,7 @@
           });
 
           mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
+            if (event.data && event.data.size > 0) {
               recordedChunks.push(event.data);
             }
           };
@@ -191,7 +201,9 @@
           function drawFrame() {
             if (!isRecording) return;
             const mergedCanvas = mergeCanvases();
-            recordCtx.drawImage(mergedCanvas, 0, 0);
+            if (mergedCanvas) {
+              recordCtx.drawImage(mergedCanvas, 0, 0);
+            }
             recordingAnimationId = requestAnimationFrame(drawFrame);
           }
 
@@ -199,7 +211,6 @@
 
         } catch (e) {
           console.error('Recording error:', e);
-          alert('Could not start recording: ' + e.message);
           controls.classList.remove('hidden');
           recordingControls.classList.remove('show');
           isRecording = false;
