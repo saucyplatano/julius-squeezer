@@ -52,7 +52,7 @@
     </style>
   </head>
   <body>
-    <a-scene mindar-image="imageTargetSrc: ./squeezer.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-scene mindar-image="imageTargetSrc: ./squeezer.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights, preserveDrawingBuffer: true" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
       <a-assets>
         <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline></video>
       </a-assets>
@@ -82,7 +82,7 @@
       let mediaRecorder;
       let recordedChunks = [];
       let isRecording = false;
-      let canvasStream;
+      let recordingAnimationId;
 
       function playVideo() {
         video.play();
@@ -92,17 +92,53 @@
         video.pause();
       }
 
+      // Get the camera video element from MindAR
+      function getCameraVideoElement() {
+        const videoElement = document.querySelector('[mindar-image-target] a-scene video') || 
+                            document.querySelector('video[autoplay]');
+        return videoElement;
+      }
+
+      // Merge camera feed with AR canvas
+      function mergeCanvases() {
+        const scene = document.querySelector('a-scene');
+        const arCanvas = scene.renderer.domElement;
+        
+        // Create temporary canvas for merging
+        const mergedCanvas = document.createElement('canvas');
+        mergedCanvas.width = arCanvas.width;
+        mergedCanvas.height = arCanvas.height;
+        const ctx = mergedCanvas.getContext('2d');
+        
+        // Get the camera video stream from MindAR
+        // MindAR stores video in the scene's mindar-image component
+        const mindArVideo = document.querySelector('[mindar-image-target]')?.parentElement?.querySelector('video') ||
+                           Array.from(document.querySelectorAll('video')).find(v => v.srcObject);
+        
+        // Draw camera feed (or use black if not available)
+        if (mindArVideo && mindArVideo.readyState === mindArVideo.HAVE_ENOUGH_DATA) {
+          ctx.drawImage(mindArVideo, 0, 0, mergedCanvas.width, mergedCanvas.height);
+        } else {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, mergedCanvas.width, mergedCanvas.height);
+        }
+        
+        // Overlay AR canvas on top
+        ctx.drawImage(arCanvas, 0, 0);
+        
+        return mergedCanvas;
+      }
+
       // Take Photo
       function takePhoto() {
         controls.classList.add('hidden');
         
         setTimeout(() => {
           try {
-            const scene = document.querySelector('a-scene');
-            const canvas = scene.renderer.domElement;
+            const mergedCanvas = mergeCanvases();
             
             const link = document.createElement('a');
-            link.href = canvas.toDataURL('image/png');
+            link.href = mergedCanvas.toDataURL('image/png');
             link.download = 'julius-squeezer-' + Date.now() + '.png';
             link.click();
             
@@ -127,47 +163,21 @@
         recordedChunks = [];
         
         try {
+          // Create a temporary canvas for recording
           const scene = document.querySelector('a-scene');
-          const canvas = scene.renderer.domElement;
+          const arCanvas = scene.renderer.domElement;
           
-          // Use canvas.captureStream with higher framerate
-          if (canvas.captureStream) {
-            canvasStream = canvas.captureStream(60);
-            createMediaRecorder(canvasStream);
-          } else {
-            alert('Video recording not supported on this device/browser. Try using Chrome or Firefox.');
-            controls.classList.remove('hidden');
-            recordingControls.classList.remove('show');
-          }
-        } catch (e) {
-          console.error('Recording error:', e);
-          alert('Could not start recording: ' + e.message);
-          controls.classList.remove('hidden');
-          recordingControls.classList.remove('show');
-        }
-      }
-
-      function createMediaRecorder(stream) {
-        const options = { 
-          mimeType: 'video/webm'
-        };
-        
-        // Check if the mimeType is supported
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = 'video/webm;codecs=vp8';
-        }
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = 'video/webm;codecs=vp9';
-        }
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = 'video/webm;codecs=h264';
-        }
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = '';
-        }
-        
-        try {
-          mediaRecorder = new MediaRecorder(stream, options);
+          const recordCanvas = document.createElement('canvas');
+          recordCanvas.width = arCanvas.width;
+          recordCanvas.height = arCanvas.height;
+          
+          // Get canvas stream at 30 FPS
+          const canvasStream = recordCanvas.captureStream(30);
+          
+          // Start recording
+          mediaRecorder = new MediaRecorder(canvasStream, {
+            mimeType: 'video/webm'
+          });
           
           mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
@@ -185,28 +195,39 @@
             URL.revokeObjectURL(url);
           };
           
-          mediaRecorder.onerror = (e) => {
-            console.error('MediaRecorder error:', e);
-            alert('Recording error: ' + e.error);
-          };
-          
           mediaRecorder.start();
+          
+          // Continuously draw merged frames to canvas
+          const ctx = recordCanvas.getContext('2d');
+          
+          function drawFrame() {
+            if (!isRecording) return;
+            
+            const mergedCanvas = mergeCanvases();
+            ctx.drawImage(mergedCanvas, 0, 0);
+            
+            recordingAnimationId = requestAnimationFrame(drawFrame);
+          }
+          
+          drawFrame();
+          
         } catch (e) {
-          console.error('MediaRecorder creation error:', e);
-          alert('Could not create recorder: ' + e.message);
+          console.error('Recording error:', e);
+          alert('Could not start recording: ' + e.message);
           controls.classList.remove('hidden');
           recordingControls.classList.remove('show');
+          isRecording = false;
         }
       }
 
       function stopRecording() {
         isRecording = false;
+        cancelAnimationFrame(recordingAnimationId);
+        
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
           mediaRecorder.stop();
         }
-        if (canvasStream) {
-          canvasStream.getTracks().forEach(track => track.stop());
-        }
+        
         recordingControls.classList.remove('show');
         controls.classList.remove('hidden');
       }
