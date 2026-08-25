@@ -96,17 +96,10 @@
       function takePhoto() {
         controls.classList.add('hidden');
         
-        requestAnimationFrame(() => {
-          setTimeout(() => {
+        setTimeout(() => {
+          try {
             const scene = document.querySelector('a-scene');
-            const renderer = scene.renderer;
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = renderer.domElement.width;
-            canvas.height = renderer.domElement.height;
-            
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(renderer.domElement, 0, 0);
+            const canvas = scene.renderer.domElement;
             
             const link = document.createElement('a');
             link.href = canvas.toDataURL('image/png');
@@ -114,8 +107,11 @@
             link.click();
             
             controls.classList.remove('hidden');
-          }, 50);
-        });
+          } catch (e) {
+            console.error('Photo error:', e);
+            controls.classList.remove('hidden');
+          }
+        }, 100);
       }
 
       // Toggle Video Recording
@@ -132,14 +128,13 @@
         
         try {
           const scene = document.querySelector('a-scene');
-          const renderer = scene.renderer;
+          const canvas = scene.renderer.domElement;
           
-          // Create canvas stream from the renderer
-          if (renderer.domElement.captureStream) {
-            canvasStream = renderer.domElement.captureStream(30);
+          // Use canvas.captureStream with higher framerate
+          if (canvas.captureStream) {
+            canvasStream = canvas.captureStream(60);
             createMediaRecorder(canvasStream);
           } else {
-            // Fallback for browsers that don't support captureStream
             alert('Video recording not supported on this device/browser. Try using Chrome or Firefox.');
             controls.classList.remove('hidden');
             recordingControls.classList.remove('show');
@@ -171,25 +166,37 @@
           options.mimeType = '';
         }
         
-        mediaRecorder = new MediaRecorder(stream, options);
-        
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            recordedChunks.push(event.data);
-          }
-        };
-        
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(recordedChunks, { type: 'video/webm' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = 'julius-squeezer-' + Date.now() + '.webm';
-          link.click();
-          URL.revokeObjectURL(url);
-        };
-        
-        mediaRecorder.start();
+        try {
+          mediaRecorder = new MediaRecorder(stream, options);
+          
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              recordedChunks.push(event.data);
+            }
+          };
+          
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'julius-squeezer-' + Date.now() + '.webm';
+            link.click();
+            URL.revokeObjectURL(url);
+          };
+          
+          mediaRecorder.onerror = (e) => {
+            console.error('MediaRecorder error:', e);
+            alert('Recording error: ' + e.error);
+          };
+          
+          mediaRecorder.start();
+        } catch (e) {
+          console.error('MediaRecorder creation error:', e);
+          alert('Could not create recorder: ' + e.message);
+          controls.classList.remove('hidden');
+          recordingControls.classList.remove('show');
+        }
       }
 
       function stopRecording() {
