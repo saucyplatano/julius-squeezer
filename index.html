@@ -141,7 +141,7 @@
     <a-scene
       mindar-image="imageTargetSrc: ./squeezer.mind;"
       color-space="sRGB"
-      renderer="preserveDrawingBuffer: true; colorManagement: true; physicallyCorrectLights: true"
+      renderer="preserveDrawingBuffer: true; toneMapping: no; colorManagement: false;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
@@ -152,7 +152,7 @@
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-        <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0" material="shader: flat;"></a-plane>
+        <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0" material="shader: flat; toneMapped: false;"></a-plane>
       </a-entity>
     </a-scene>
     <!-- ===== END: DO NOT MODIFY ===== -->
@@ -190,6 +190,11 @@
         if (introClosed) return;
         introClosed = true;
 
+        // Ensure AR overlay video starts playing on intro exit gesture
+        if (video) {
+          video.play().catch(e => console.log('Autoplay deferred:', e));
+        }
+
         introOverlay.classList.add('fade-out');
         setTimeout(() => {
           introVideo.pause();
@@ -223,15 +228,24 @@
       // Track the timer interval externally
       let timerInterval;
 
+      // Synchronize Play/Pause button UI dynamically with actual video state
+      if (video) {
+        video.addEventListener('play', () => {
+          const btn = document.getElementById('playPauseBtn');
+          if (btn) btn.innerText = "⏸ Pause";
+        });
+        video.addEventListener('pause', () => {
+          const btn = document.getElementById('playPauseBtn');
+          if (btn) btn.innerText = "▶ Play";
+        });
+      }
+
       // ===== VIDEO PLAYBACK FUNCTIONS (SAFE TO MODIFY) =====
       function toggleVideo() {
-        const btn = document.getElementById('playPauseBtn');
         if (video.paused) {
           video.play();
-          btn.innerText = "⏸ Pause";
         } else {
           video.pause();
-          btn.innerText = "▶ Play";
         }
       }
       // ===== END: VIDEO PLAYBACK FUNCTIONS =====
@@ -430,8 +444,10 @@
             const forcePlayOnTouch = () => {
               video.play();
               document.removeEventListener('touchstart', forcePlayOnTouch);
+              document.removeEventListener('click', forcePlayOnTouch);
             };
             document.addEventListener('touchstart', forcePlayOnTouch);
+            document.addEventListener('click', forcePlayOnTouch);
           });
         });
 
