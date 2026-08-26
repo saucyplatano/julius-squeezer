@@ -83,6 +83,7 @@
         border-radius: 3px;
       }
 
+      /* Intro Video Overlay Styling */
       #introOverlay {
         position: fixed;
         top: 0;
@@ -133,7 +134,7 @@
   <body>
     <div id="introOverlay">
       <video id="introVideo" src="./globalvisionintro.mp4" autoplay muted playsinline></video>
-      <button id="skipIntroBtn" onclick="closeIntro()">Skip ⏭</button>
+      <button id="skipIntroBtn" onclick="closeIntro(event)">Skip ⏭</button>
     </div>
 
     <!-- ===== DO NOT MODIFY THIS SECTION ===== -->
@@ -146,7 +147,7 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline webkit-playsinline></video>
+        <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop playsinline webkit-playsinline></video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -172,7 +173,6 @@
     <!-- ===== END: UI Controls ===== -->
 
     <script>
-      // ===== CORE ELEMENTS =====
       const video = document.getElementById('squeezerVideo');
       const introVideo = document.getElementById('introVideo');
       const introOverlay = document.getElementById('introOverlay');
@@ -186,13 +186,15 @@
       let timerInterval;
       let introClosed = false;
 
-      // ===== INTRO & PLAYBACK FLOW =====
-      // Dismiss intro overlay and start AR video using the user gesture
-      function closeIntro() {
+      function closeIntro(e) {
+        if (e && e.stopPropagation) {
+          e.stopPropagation();
+        }
         if (introClosed) return;
         introClosed = true;
 
         if (video) {
+          video.muted = false;
           video.play().catch(e => console.log('Video play deferred:', e));
         }
 
@@ -204,8 +206,8 @@
         }, 600);
       }
 
-      // Sync button text when video state changes
       if (video) {
+        video.muted = false;
         video.addEventListener('play', () => {
           const btn = document.getElementById('playPauseBtn');
           if (btn) btn.innerText = "⏸ Pause";
@@ -216,22 +218,17 @@
         });
       }
 
-      // Auto-close intro when video finishes playing
+      // Auto-close intro when video finishes playing natively
       if (introVideo) {
         introVideo.addEventListener('ended', closeIntro);
-        // Attempt autoplay on load (Chrome/Android will succeed, Firefox/Safari wait for gesture)
         introVideo.play().catch(() => {
-          console.log('Intro waiting for user tap.');
+          console.log('Intro waiting for user interaction.');
         });
-      }
-
-      // Clicking anywhere on the intro screen acts as the gesture to start
-      if (introOverlay) {
-        introOverlay.addEventListener('click', closeIntro);
       }
 
       function toggleVideo() {
         if (!video) return;
+        video.muted = false;
         if (video.paused) {
           video.play();
         } else {
@@ -239,7 +236,6 @@
         }
       }
 
-      // ===== CAPTURE ENGINE =====
       function getMindARVideo() {
         return Array.from(document.querySelectorAll('video')).find(v => v.srcObject !== null && v.id !== 'squeezerVideo');
       }
@@ -291,7 +287,6 @@
         }
       }
 
-      // ===== PHOTO & RECORDING =====
       function takePhoto() {
         controls.classList.add('hidden');
 
