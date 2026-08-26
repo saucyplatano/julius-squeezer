@@ -82,9 +82,60 @@
         padding: 2px 6px;
         border-radius: 3px;
       }
+
+      #introOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #000;
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+        transition: opacity 0.6s ease;
+      }
+
+      #introOverlay.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #introVideo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      #skipIntroBtn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 2001;
+        background: rgba(0, 0, 0, 0.5);
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 8px 18px;
+        border-radius: 20px;
+        font-size: 14px;
+        cursor: pointer;
+        backdrop-filter: blur(5px);
+        transition: background-color 0.2s;
+      }
+
+      #skipIntroBtn:hover {
+        background: rgba(0, 0, 0, 0.8);
+      }
     </style>
   </head>
   <body>
+    <div id="introOverlay">
+      <video id="introVideo" src="./globalvisionintro.mp4" autoplay muted playsinline></video>
+      <button id="skipIntroBtn" onclick="closeIntro()">Skip ⏭</button>
+    </div>
+
     <!-- ===== DO NOT MODIFY THIS SECTION ===== -->
     <!-- A-Frame Scene: Image tracking and AR setup -->
     <a-scene
@@ -107,7 +158,7 @@
     <!-- ===== END: DO NOT MODIFY ===== -->
 
     <!-- ===== YOU CAN MODIFY: UI Controls ===== -->
-    <div id="controls">
+    <div id="controls" class="hidden">
       <button id="playPauseBtn" onclick="toggleVideo()">⏸ Pause</button>
       <button onclick="takePhoto()">📷 Photo</button>
       <button onclick="toggleRecording()">🔴 Record</button>
@@ -130,6 +181,36 @@
       let isRecording = false;
       let recordingAnimationId;
       // ===== END: CORE VARIABLES =====
+
+      const introOverlay = document.getElementById('introOverlay');
+      const introVideo = document.getElementById('introVideo');
+      let introClosed = false;
+
+      function closeIntro() {
+        if (introClosed) return;
+        introClosed = true;
+
+        introOverlay.classList.add('fade-out');
+        setTimeout(() => {
+          introVideo.pause();
+          introOverlay.style.display = 'none';
+          controls.classList.remove('hidden');
+        }, 600);
+      }
+
+      if (introVideo) {
+        // Auto-close overlay when video reaches end
+        introVideo.addEventListener('ended', closeIntro);
+
+        // Mobile autoplay fallback check
+        introVideo.play().catch(() => {
+          const startIntroOnTouch = () => {
+            introVideo.play();
+            document.removeEventListener('touchstart', startIntroOnTouch);
+          };
+          document.addEventListener('touchstart', startIntroOnTouch);
+        });
+      }
 
       // Track the timer interval externally
       let timerInterval;
