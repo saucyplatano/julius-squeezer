@@ -178,6 +178,7 @@
       const introOverlay = document.getElementById('introOverlay');
       const controls = document.getElementById('controls');
       const recordingControls = document.getElementById('recordingControls');
+      const targetEntity = document.getElementById('targetEntity');
       
       let mediaRecorder;
       let recordedChunks = [];
@@ -186,6 +187,24 @@
       let timerInterval;
       let introClosed = false;
 
+      // Unlocks video audio permissions across browsers on ANY tap anywhere on screen
+      function unlockAudioGesture() {
+        if (video) {
+          video.muted = false;
+          const playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(err => {
+              console.log('Video play deferred until target visible:', err);
+            });
+          }
+        }
+      }
+
+      // Allow ANY touch or click anywhere on screen to enable unmuted autoplay
+      // WITHOUT closing or skipping the intro screen
+      window.addEventListener('click', unlockAudioGesture);
+      window.addEventListener('touchstart', unlockAudioGesture);
+
       function closeIntro(e) {
         if (e && e.stopPropagation) {
           e.stopPropagation();
@@ -193,10 +212,7 @@
         if (introClosed) return;
         introClosed = true;
 
-        if (video) {
-          video.muted = false;
-          video.play().catch(e => console.log('Video play deferred:', e));
-        }
+        unlockAudioGesture();
 
         introOverlay.classList.add('fade-out');
         setTimeout(() => {
@@ -215,6 +231,16 @@
         video.addEventListener('pause', () => {
           const btn = document.getElementById('playPauseBtn');
           if (btn) btn.innerText = "▶ Play";
+        });
+      }
+
+      // Unmute and play automatically when MindAR detects target
+      if (targetEntity) {
+        targetEntity.addEventListener('targetFound', () => {
+          if (video) {
+            video.muted = false;
+            video.play().catch(e => console.log('Target found play defer:', e));
+          }
         });
       }
 
