@@ -152,7 +152,7 @@
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-        <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0"></a-plane>
+        <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0" material="shader: flat;"></a-plane>
       </a-entity>
     </a-scene>
     <!-- ===== END: DO NOT MODIFY ===== -->
@@ -199,17 +199,25 @@
       }
 
       if (introVideo) {
+        // Force muted state via JS to satisfy strict Firefox/Safari autoplay rules
+        introVideo.muted = true;
+
         // Auto-close overlay when video reaches end
         introVideo.addEventListener('ended', closeIntro);
 
-        // Mobile autoplay fallback check
-        introVideo.play().catch(() => {
-          const startIntroOnTouch = () => {
-            introVideo.play();
-            document.removeEventListener('touchstart', startIntroOnTouch);
-          };
-          document.addEventListener('touchstart', startIntroOnTouch);
-        });
+        // Mobile & Firefox autoplay fallback check
+        const playPromise = introVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            const startIntroOnTouch = () => {
+              introVideo.play();
+              document.removeEventListener('click', startIntroOnTouch);
+              document.removeEventListener('touchstart', startIntroOnTouch);
+            };
+            document.addEventListener('click', startIntroOnTouch);
+            document.addEventListener('touchstart', startIntroOnTouch);
+          });
+        }
       }
 
       // Track the timer interval externally
