@@ -90,7 +90,7 @@
     <a-scene
       mindar-image="imageTargetSrc: ./squeezer.mind;"
       color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights"
+      renderer="colorManagement: true, physicallyCorrectLights, preserveDrawingBuffer: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
@@ -156,6 +156,12 @@
         try {
           const scene = document.querySelector('a-scene');
           const arCanvas = scene.renderer.domElement;
+
+          // Force WebGL to render the current 3D frame into the buffer immediately before snapshotting
+          if (scene.renderer && scene.camera) {
+            scene.renderer.render(scene.object3D, scene.camera);
+          }
+
           const mindArVideo = getMindARVideo();
 
           const mergedCanvas = document.createElement('canvas');
