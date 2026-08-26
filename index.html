@@ -147,7 +147,7 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop playsinline webkit-playsinline></video>
+        <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline webkit-playsinline></video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -187,8 +187,7 @@
       let timerInterval;
       let introClosed = false;
 
-      // Unlocks video audio permissions across browsers on ANY tap anywhere on screen
-      function unlockAudioGesture() {
+      function enableAudio() {
         if (video) {
           video.muted = false;
           const playPromise = video.play();
@@ -200,10 +199,9 @@
         }
       }
 
-      // Allow ANY touch or click anywhere on screen to enable unmuted autoplay
-      // WITHOUT closing or skipping the intro screen
-      window.addEventListener('click', unlockAudioGesture);
-      window.addEventListener('touchstart', unlockAudioGesture);
+      // Allow ANY touch or click anywhere on screen to enable unmuted audio
+      window.addEventListener('click', enableAudio);
+      window.addEventListener('touchstart', enableAudio);
 
       function closeIntro(e) {
         if (e && e.stopPropagation) {
@@ -212,7 +210,7 @@
         if (introClosed) return;
         introClosed = true;
 
-        unlockAudioGesture();
+        enableAudio();
 
         introOverlay.classList.add('fade-out');
         setTimeout(() => {
@@ -223,7 +221,6 @@
       }
 
       if (video) {
-        video.muted = false;
         video.addEventListener('play', () => {
           const btn = document.getElementById('playPauseBtn');
           if (btn) btn.innerText = "⏸ Pause";
