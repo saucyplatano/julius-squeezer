@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>MindAR WebAR Experience</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.0.0/dist/aframe-extras.min.js"></script>
@@ -11,6 +11,7 @@
       body {
         margin: 0;
         overflow: hidden;
+        touch-action: manipulation;
       }
       #controls {
         position: fixed;
@@ -19,6 +20,9 @@
         transform: translateX(-50%);
         z-index: 100;
         transition: opacity 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
       #controls.hidden {
         opacity: 0;
@@ -36,14 +40,15 @@
         display: block;
       }
       button {
-        padding: 10px 20px;
-        margin: 0 5px;
-        font-size: 16px;
+        padding: 10px 16px;
+        font-size: 15px;
         background-color: #4CAF50;
         color: white;
         border: none;
-        border-radius: 5px;
+        border-radius: 6px;
         cursor: pointer;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
       button:hover {
         background-color: #45a049;
@@ -75,7 +80,7 @@
         font-family: sans-serif;
         font-size: 14px;
         vertical-align: middle;
-        margin-left: 10px;
+        margin-left: 8px;
         display: inline-block;
         font-variant-numeric: tabular-nums;
         background: rgba(0, 0, 0, 0.3);
@@ -129,6 +134,27 @@
       #skipIntroBtn:hover {
         background: rgba(0, 0, 0, 0.8);
       }
+
+      /* Zoom Level Indicator */
+      #zoomIndicator {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-family: sans-serif;
+        font-size: 13px;
+        padding: 4px 12px;
+        border-radius: 12px;
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+      }
+      #zoomIndicator.show {
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
@@ -137,8 +163,10 @@
       <button id="skipIntroBtn" onclick="closeIntro(event)">Skip ⏭</button>
     </div>
 
+    <!-- Zoom level notification pill -->
+    <div id="zoomIndicator">1.0x</div>
+
     <!-- ===== DO NOT MODIFY THIS SECTION ===== -->
-    <!-- A-Frame Scene: Image tracking and AR setup -->
     <a-scene
       mindar-image="imageTargetSrc: ./squeezer.mind;"
       color-space="sRGB"
@@ -150,7 +178,7 @@
         <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline webkit-playsinline></video>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera id="mainCamera" position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <a-entity id="targetEntity" mindar-image-target="targetIndex: 0">
         <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0" material="shader: flat; toneMapped: false;"></a-plane>
@@ -158,8 +186,9 @@
     </a-scene>
     <!-- ===== END: DO NOT MODIFY ===== -->
 
-    <!-- ===== YOU CAN MODIFY: UI Controls ===== -->
     <div id="controls" class="hidden">
+      <button onclick="changeZoom(-0.25)" title="Zoom Out">🔍-</button>
+      <button onclick="changeZoom(0.25)" title="Zoom In">🔍+</button>
       <button id="playPauseBtn" onclick="toggleVideo()">⏸ Pause</button>
       <button onclick="takePhoto()">📷 Photo</button>
       <button onclick="toggleRecording()">🔴 Record</button>
@@ -170,16 +199,33 @@
         ⏹️ Stop Recording <span id="recordTimer">00:00</span>
       </button>
     </div>
-    <!-- ===== END: UI Controls ===== -->
 
     <script>
+      (function applyHighQualityCameraConstraints() {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+          navigator.mediaDevices.getUserMedia = async function(constraints) {
+            if (constraints && constraints.video) {
+              constraints.video = {
+                facingMode: "environment",
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 }
+              };
+            }
+            return originalGetUserMedia(constraints);
+          };
+        }
+      })();
+
       const video = document.getElementById('squeezerVideo');
       const introVideo = document.getElementById('introVideo');
       const introOverlay = document.getElementById('introOverlay');
       const controls = document.getElementById('controls');
       const recordingControls = document.getElementById('recordingControls');
       const targetEntity = document.getElementById('targetEntity');
-      
+      const mainCamera = document.getElementById('mainCamera');
+      const zoomIndicator = document.getElementById('zoomIndicator');
+
       let mediaRecorder;
       let recordedChunks = [];
       let isRecording = false;
@@ -187,19 +233,19 @@
       let timerInterval;
       let introClosed = false;
 
+      // Unmute video stream on user gesture
       function enableAudio() {
         if (video) {
           video.muted = false;
           const playPromise = video.play();
           if (playPromise !== undefined) {
             playPromise.catch(err => {
-              console.log('Video play deferred until target visible:', err);
+              console.log('Audio unblock deferred:', err);
             });
           }
         }
       }
 
-      // Allow ANY touch or click anywhere on screen to enable unmuted audio
       window.addEventListener('click', enableAudio);
       window.addEventListener('touchstart', enableAudio);
 
@@ -220,6 +266,87 @@
         }, 600);
       }
 
+      if (introVideo) {
+        introVideo.addEventListener('ended', closeIntro);
+        introVideo.play().catch(() => {
+          console.log('Waiting for interaction to play intro.');
+        });
+      }
+
+      let currentZoom = 1.0;
+      const minZoom = 1.0;
+      const maxZoom = 4.0;
+      let zoomTimeout;
+
+      function showZoomPill(val) {
+        zoomIndicator.innerText = `${val.toFixed(1)}x`;
+        zoomIndicator.classList.add('show');
+        clearTimeout(zoomTimeout);
+        zoomTimeout = setTimeout(() => {
+          zoomIndicator.classList.remove('show');
+        }, 1500);
+      }
+
+      function applyZoom(newZoom) {
+        currentZoom = Math.min(Math.max(newZoom, minZoom), maxZoom);
+        showZoomPill(currentZoom);
+
+        // 1. Hardware WebRTC Zoom (Android Chrome)
+        const mindArVideo = getMindARVideo();
+        if (mindArVideo && mindArVideo.srcObject) {
+          const track = mindArVideo.srcObject.getVideoTracks()[0];
+          if (track) {
+            const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            if (capabilities.zoom) {
+              const targetZoom = capabilities.min + (currentZoom - 1) * ((capabilities.max - capabilities.min) / (maxZoom - 1));
+              track.applyConstraints({ advanced: [{ zoom: targetZoom }] }).catch(() => {});
+            }
+          }
+        }
+
+        // 2. A-Frame Camera FOV Zoom Fallback (Works on iOS Safari & everywhere)
+        if (mainCamera) {
+          const defaultFov = 80;
+          const targetFov = defaultFov / currentZoom;
+          mainCamera.setAttribute('camera', 'fov', targetFov);
+        }
+      }
+
+      function changeZoom(delta) {
+        applyZoom(currentZoom + delta);
+      }
+
+      // Pinch-to-zoom gesture event handling
+      let initialDistance = null;
+      let startZoom = 1.0;
+
+      window.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          initialDistance = Math.hypot(
+            e.touches[0].pageX - e.touches[1].pageX,
+            e.touches[0].pageY - e.touches[1].pageY
+          );
+          startZoom = currentZoom;
+        }
+      }, { passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && initialDistance) {
+          const currentDistance = Math.hypot(
+            e.touches[0].pageX - e.touches[1].pageX,
+            e.touches[0].pageY - e.touches[1].pageY
+          );
+          const factor = currentDistance / initialDistance;
+          applyZoom(startZoom * factor);
+        }
+      }, { passive: true });
+
+      window.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) {
+          initialDistance = null;
+        }
+      }, { passive: true });
+
       if (video) {
         video.addEventListener('play', () => {
           const btn = document.getElementById('playPauseBtn');
@@ -231,21 +358,12 @@
         });
       }
 
-      // Unmute and play automatically when MindAR detects target
       if (targetEntity) {
         targetEntity.addEventListener('targetFound', () => {
           if (video) {
             video.muted = false;
             video.play().catch(e => console.log('Target found play defer:', e));
           }
-        });
-      }
-
-      // Auto-close intro when video finishes playing natively
-      if (introVideo) {
-        introVideo.addEventListener('ended', closeIntro);
-        introVideo.play().catch(() => {
-          console.log('Intro waiting for user interaction.');
         });
       }
 
