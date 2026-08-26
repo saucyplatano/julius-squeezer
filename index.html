@@ -146,12 +146,12 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline></video>
+        <video id="squeezerVideo" src="./squeezerVideo.mp4" autoplay loop muted playsinline webkit-playsinline></video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <a-entity mindar-image-target="targetIndex: 0">
+      <a-entity id="targetEntity" mindar-image-target="targetIndex: 0">
         <a-plane src="#squeezerVideo" position="0 0 0.05" height="0.552" width="1" rotation="0 0 0" material="shader: flat; toneMapped: false;"></a-plane>
       </a-entity>
     </a-scene>
@@ -172,63 +172,39 @@
     <!-- ===== END: UI Controls ===== -->
 
     <script>
-      // ===== CORE VARIABLES (DO NOT MODIFY) =====
+      // ===== CORE ELEMENTS =====
       const video = document.getElementById('squeezerVideo');
+      const introVideo = document.getElementById('introVideo');
+      const introOverlay = document.getElementById('introOverlay');
       const controls = document.getElementById('controls');
       const recordingControls = document.getElementById('recordingControls');
+      
       let mediaRecorder;
       let recordedChunks = [];
       let isRecording = false;
       let recordingAnimationId;
-      // ===== END: CORE VARIABLES =====
-
-      const introOverlay = document.getElementById('introOverlay');
-      const introVideo = document.getElementById('introVideo');
+      let timerInterval;
       let introClosed = false;
 
+      // ===== INTRO & PLAYBACK FLOW =====
+      // Dismiss intro overlay and start AR video using the user gesture
       function closeIntro() {
         if (introClosed) return;
         introClosed = true;
 
-        // Ensure AR overlay video starts playing on intro exit gesture
         if (video) {
-          video.play().catch(e => console.log('Autoplay deferred:', e));
+          video.play().catch(e => console.log('Video play deferred:', e));
         }
 
         introOverlay.classList.add('fade-out');
         setTimeout(() => {
-          introVideo.pause();
+          if (introVideo) introVideo.pause();
           introOverlay.style.display = 'none';
           controls.classList.remove('hidden');
         }, 600);
       }
 
-      if (introVideo) {
-        // Force muted state via JS to satisfy strict Firefox/Safari autoplay rules
-        introVideo.muted = true;
-
-        // Auto-close overlay when video reaches end
-        introVideo.addEventListener('ended', closeIntro);
-
-        // Mobile & Firefox autoplay fallback check
-        const playPromise = introVideo.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            const startIntroOnTouch = () => {
-              introVideo.play();
-              document.removeEventListener('click', startIntroOnTouch);
-              document.removeEventListener('touchstart', startIntroOnTouch);
-            };
-            document.addEventListener('click', startIntroOnTouch);
-            document.addEventListener('touchstart', startIntroOnTouch);
-          });
-        }
-      }
-
-      // Track the timer interval externally
-      let timerInterval;
-
-      // Synchronize Play/Pause button UI dynamically with actual video state
+      // Sync button text when video state changes
       if (video) {
         video.addEventListener('play', () => {
           const btn = document.getElementById('playPauseBtn');
@@ -240,17 +216,30 @@
         });
       }
 
-      // ===== VIDEO PLAYBACK FUNCTIONS (SAFE TO MODIFY) =====
+      // Auto-close intro when video finishes playing
+      if (introVideo) {
+        introVideo.addEventListener('ended', closeIntro);
+        // Attempt autoplay on load (Chrome/Android will succeed, Firefox/Safari wait for gesture)
+        introVideo.play().catch(() => {
+          console.log('Intro waiting for user tap.');
+        });
+      }
+
+      // Clicking anywhere on the intro screen acts as the gesture to start
+      if (introOverlay) {
+        introOverlay.addEventListener('click', closeIntro);
+      }
+
       function toggleVideo() {
+        if (!video) return;
         if (video.paused) {
           video.play();
         } else {
           video.pause();
         }
       }
-      // ===== END: VIDEO PLAYBACK FUNCTIONS =====
 
-      // ===== CAPTURE ENGINE (DO NOT MODIFY - Technical) =====
+      // ===== CAPTURE ENGINE =====
       function getMindARVideo() {
         return Array.from(document.querySelectorAll('video')).find(v => v.srcObject !== null && v.id !== 'squeezerVideo');
       }
@@ -294,18 +283,15 @@
             ctx.fillRect(0, 0, mergedCanvas.width, mergedCanvas.height);
           }
 
-          // Overlay AR canvas directly from WebGL buffer
           ctx.drawImage(arCanvas, 0, 0);
-
           return mergedCanvas;
         } catch (e) {
           console.error('Merge error:', e);
           return null;
         }
       }
-      // ===== END: CAPTURE ENGINE =====
 
-      // ===== PHOTO & VIDEO FUNCTIONS (SAFE TO MODIFY FOR UI FLOW) =====
+      // ===== PHOTO & RECORDING =====
       function takePhoto() {
         controls.classList.add('hidden');
 
@@ -320,21 +306,16 @@
           }, 50);
         });
 
-        // Sync with A-Frame's render loop to capture non-cleared WebGL frame
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             try {
               const mergedCanvas = mergeCanvases();
-              if (!mergedCanvas) {
-                console.error('Could not create merged canvas');
-                controls.classList.remove('hidden');
-                return;
+              if (mergedCanvas) {
+                const link = document.createElement('a');
+                link.href = mergedCanvas.toDataURL('image/png');
+                link.download = 'julius-squeezer-' + Date.now() + '.png';
+                link.click();
               }
-
-              const link = document.createElement('a');
-              link.href = mergedCanvas.toDataURL('image/png');
-              link.download = 'julius-squeezer-' + Date.now() + '.png';
-              link.click();
             } catch (e) {
               console.error('Photo error:', e);
             } finally {
@@ -354,7 +335,7 @@
 
         isRecording = true;
         recordedChunks = [];
-        // Reset and begin on-screen counter tracker
+        
         const timerElement = document.getElementById('recordTimer');
         let totalSeconds = 0;
         timerElement.innerText = "00:00";
@@ -377,9 +358,7 @@
 
           const canvasStream = recordCanvas.captureStream(30);
 
-          mediaRecorder = new MediaRecorder(canvasStream, {
-            mimeType: 'video/webm'
-          });
+          mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm' });
 
           mediaRecorder.ondataavailable = (event) => {
             if (event.data && event.data.size > 0) {
@@ -431,38 +410,6 @@
         recordingControls.classList.remove('show');
         controls.classList.remove('hidden');
       }
-      // ===== END: PHOTO & VIDEO FUNCTIONS =====
-
-      // ===== INITIALIZATION (DO NOT MODIFY) =====
-      video.autoplay = true;
-      // ===== END: INITIALIZATION =====
-
-      // ===== HIGH-QUALITY CAMERA & AUTOPLAY AUDIO INJECTION (SAFE TO MODIFY) =====
-      (function applyMobileQualityFixes() {
-        document.addEventListener('DOMContentLoaded', () => {
-          video.play().catch(() => {
-            const forcePlayOnTouch = () => {
-              video.play();
-              document.removeEventListener('touchstart', forcePlayOnTouch);
-              document.removeEventListener('click', forcePlayOnTouch);
-            };
-            document.addEventListener('touchstart', forcePlayOnTouch);
-            document.addEventListener('click', forcePlayOnTouch);
-          });
-        });
-
-        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-        navigator.mediaDevices.getUserMedia = async function(constraints) {
-          if (constraints && constraints.video) {
-            constraints.video = {
-              facingMode: "environment",
-              width: { ideal: 1920, min: 1280 },
-              height: { ideal: 1080, min: 720 }
-            };
-          }
-          return originalGetUserMedia(constraints);
-        };
-      })();
     </script>
   </body>
 </html>
