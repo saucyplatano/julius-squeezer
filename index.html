@@ -90,7 +90,7 @@
     <a-scene
       mindar-image="imageTargetSrc: ./squeezer.mind;"
       color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights, preserveDrawingBuffer: true"
+      renderer="preserveDrawingBuffer: true; colorManagement: true; physicallyCorrectLights: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
@@ -155,13 +155,9 @@
       function mergeCanvases() {
         try {
           const scene = document.querySelector('a-scene');
+          if (!scene || !scene.renderer) return null;
+
           const arCanvas = scene.renderer.domElement;
-
-          // Force WebGL to render the current 3D frame into the buffer immediately before snapshotting
-          if (scene.renderer && scene.camera) {
-            scene.renderer.render(scene.object3D, scene.camera);
-          }
-
           const mindArVideo = getMindARVideo();
 
           const mergedCanvas = document.createElement('canvas');
@@ -195,7 +191,7 @@
             ctx.fillRect(0, 0, mergedCanvas.width, mergedCanvas.height);
           }
 
-          // Overlay AR canvas
+          // Overlay AR canvas directly from WebGL buffer
           ctx.drawImage(arCanvas, 0, 0);
 
           return mergedCanvas;
@@ -221,26 +217,28 @@
           }, 50);
         });
 
-        setTimeout(() => {
-          try {
-            const mergedCanvas = mergeCanvases();
-            if (!mergedCanvas) {
-              console.error('Could not create merged canvas');
+        // Sync with A-Frame's render loop to capture non-cleared WebGL frame
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            try {
+              const mergedCanvas = mergeCanvases();
+              if (!mergedCanvas) {
+                console.error('Could not create merged canvas');
+                controls.classList.remove('hidden');
+                return;
+              }
+
+              const link = document.createElement('a');
+              link.href = mergedCanvas.toDataURL('image/png');
+              link.download = 'julius-squeezer-' + Date.now() + '.png';
+              link.click();
+            } catch (e) {
+              console.error('Photo error:', e);
+            } finally {
               controls.classList.remove('hidden');
-              return;
             }
-
-            const link = document.createElement('a');
-            link.href = mergedCanvas.toDataURL('image/png');
-            link.download = 'julius-squeezer-' + Date.now() + '.png';
-            link.click();
-
-            controls.classList.remove('hidden');
-          } catch (e) {
-            console.error('Photo error:', e);
-            controls.classList.remove('hidden');
-          }
-        }, 100);
+          });
+        });
       }
 
       function toggleRecording() {
